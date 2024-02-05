@@ -1,20 +1,18 @@
-FROM node:20-alpine as base
+FROM node:20-alpine as build
 WORKDIR /app
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
 
-# Build layer
-FROM base as build
+COPY package.json ./
+COPY pnpm-lock.yaml ./
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
-RUN npm i -g pnpm
-COPY pnpm-lock.yaml package.json ./
-RUN pnpm install --frozen-lockfile
-COPY . .
-RUN pnpm build
+COPY . ./
+RUN pnpm run build
 
-# Production layer
-FROM base as production
-
-EXPOSE 3000
-ENV NODE_ENV=production
-COPY --from=build /app/.output ./.output
-
-CMD ["node", ".output/server/index.mjs"]
+# production environment
+FROM nginx:stable-alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
